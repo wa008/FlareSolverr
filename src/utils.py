@@ -156,7 +156,7 @@ def get_webdriver(proxy: dict = None) -> WebDriver:
 
     options.set_capability('goog:loggingPrefs', {'browser': 'ALL'})
     prefs = {
-        'download.default_directory': download_dir,
+        'download.default_directory': '/app/output/downloads',
         'download.prompt_for_download': False,  # Don't ask where to save
         'download.directory_upgrade': True,
         'safebrowsing.enabled': False,  # Disable safe browsing warnings
