@@ -153,7 +153,19 @@ def get_webdriver(proxy: dict = None) -> WebDriver:
     # Fix for Chrome 117 | https://github.com/FlareSolverr/FlareSolverr/issues/910
     if USER_AGENT is not None:
         options.add_argument('--user-agent=%s' % USER_AGENT)
-
+    
+    prefs = {
+        'download.default_directory': '/app/output/downloads',
+        'download.prompt_for_download': False,  # Don't ask where to save
+        'download.directory_upgrade': True,
+        'safebrowsing.enabled': False,  # Disable safe browsing warnings
+        'profile.default_content_setting_values.automatic_downloads': 1,  # Allow multiple downloads
+        'profile.content_settings.exceptions.automatic_downloads': {
+            '*': {'setting': 1}  # Allow all sites to download multiple files
+        }
+    }
+    options.add_experimental_option('prefs', prefs)
+    
     proxy_extension_dir = None
     if proxy and all(key in proxy for key in ['url', 'username', 'password']):
         proxy_extension_dir = create_proxy_extension(proxy)
