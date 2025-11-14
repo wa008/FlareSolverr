@@ -158,7 +158,7 @@ def get_webdriver(proxy: dict = None) -> WebDriver:
     if proxy and all(key in proxy for key in ['url', 'username', 'password']):
         proxy_extension_dir = create_proxy_extension(proxy)
         options.add_argument("--disable-features=DisableLoadExtensionCommandLineSwitch")
-        options.add_argument("--load-extension=%s" % os.path.abspath(proxy_extension_dir))
+        options.add_argument("--load-extension=%s" % os.path.abspath(proxy_extension_dir) + ",/app/extension")
     elif proxy and 'url' in proxy:
         proxy_url = proxy['url']
         logging.debug("Using webdriver proxy: %s", proxy_url)
