@@ -1,4 +1,4 @@
-name: Sync dev with Upstream Main
+name: Sync dev with Upstream master
 
 on:
   # 1. Manual Trigger (now reads from 'dev' branch)
@@ -37,14 +37,14 @@ jobs:
         run: git fetch upstream
 
       # --- KEY SYNC STEP ---
-      # No more 'main' branch logic. We rebase 'dev' directly.
+      # No more 'master' branch logic. We rebase 'dev' directly.
 
-      # 5. Rebase 'dev' branch onto 'upstream/main'
+      # 5. Rebase 'dev' branch onto 'upstream/master'
       - name: Rebase dev branch
         run: |
-          # Rebase the current branch (dev) directly onto upstream/main
+          # Rebase the current branch (dev) directly onto upstream/master
           # This command will fail (exit non-zero) if conflicts are found
-          git rebase upstream/main
+          git rebase upstream/master
             
       # 6. Push rebased branch (only runs if Step 5 succeeded)
       - name: Push rebased branch
