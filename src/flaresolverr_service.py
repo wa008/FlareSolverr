@@ -2,6 +2,7 @@ import logging
 import platform
 import sys
 import time
+import datetime
 from datetime import timedelta
 from html import escape
 from urllib.parse import unquote, quote
@@ -399,7 +400,7 @@ def _evil_logic(req: V1RequestBase, driver: WebDriver, method: str) -> Challenge
             while elapsed < req.waitInSeconds:
                 time.sleep(min(interval, req.waitInSeconds - elapsed))
                 elapsed += interval
-                current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 try:
                     console_logs = driver.get_log('browser')
                     for log in console_logs:
