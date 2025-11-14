@@ -393,7 +393,19 @@ def _evil_logic(req: V1RequestBase, driver: WebDriver, method: str) -> Challenge
 
         if req.waitInSeconds and req.waitInSeconds > 0:
             logging.info("Waiting " + str(req.waitInSeconds) + " seconds before returning the response...")
-            time.sleep(req.waitInSeconds)
+            # time.sleep(req.waitInSeconds)
+            elapsed = 0
+            interval = 5
+            while elapsed < req.waitInSeconds:
+                time.sleep(min(interval, req.waitInSeconds - elapsed))
+                elapsed += interval
+                current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                try:
+                    console_logs = driver.get_log('browser')
+                    for log in console_logs:
+                        logging.info(f"[{current_time}] [Extension] {log.get('message', '')}")
+                except Exception:
+                    pass
 
         challenge_res.response = driver.page_source
 
