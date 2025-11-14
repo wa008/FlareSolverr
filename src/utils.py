@@ -154,6 +154,7 @@ def get_webdriver(proxy: dict = None) -> WebDriver:
     if USER_AGENT is not None:
         options.add_argument('--user-agent=%s' % USER_AGENT)
 
+    options.set_capability('goog:loggingPrefs', {'browser': 'ALL'})
     prefs = {
         'download.default_directory': download_dir,
         'download.prompt_for_download': False,  # Don't ask where to save
@@ -165,7 +166,6 @@ def get_webdriver(proxy: dict = None) -> WebDriver:
         }
     }
     options.add_experimental_option('prefs', prefs)
-    options.set_capability('goog:loggingPrefs', {'browser': 'ALL'})
     proxy_extension_dir = None
     if proxy and all(key in proxy for key in ['url', 'username', 'password']):
         proxy_extension_dir = create_proxy_extension(proxy)
