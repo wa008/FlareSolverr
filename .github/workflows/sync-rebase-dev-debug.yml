@@ -45,25 +45,25 @@ jobs:
 
       # --- KEY SYNC STEPS ---
 
-      # 5. Sync your main branch
-      # This ensures your fork's 'main' branch is an exact mirror of the upstream 'main'.
-      - name: Sync main branch
+      # 5. Sync your master branch
+      # This ensures your fork's 'master' branch is an exact mirror of the upstream 'master'.
+      - name: Sync master branch
         run: |
-          git checkout main
-          # Force-reset your local 'main' to match the upstream 'main'
-          git reset --hard upstream/main
-          # Force-push this change to your fork's 'main' branch
-          git push origin main --force
+          git checkout master
+          # Force-reset your local 'master' to match the upstream 'master'
+          git reset --hard upstream/master
+          # Force-push this change to your fork's 'master' branch
+          git push origin master --force
 
       # 6. Rebase your custom branch
-      # This is the core logic: apply your changes on top of the newly updated 'main'.
+      # This is the core logic: apply your changes on top of the newly updated 'master'.
       - name: Rebase custom branch
         run: |
           # Checkout your 'dev_debug' branch
           git checkout dev_debug
           
           # This command will fail (exit non-zero) if conflicts are found
-          git rebase main
+          git rebase master
             
       # 7. Push rebased branch (only runs if Step 6 succeeded)
       - name: Push rebased branch
