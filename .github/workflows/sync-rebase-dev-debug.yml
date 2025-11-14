@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
   
   # 2. Scheduled Trigger
-  # Runs the workflow on a schedule (e.g., every day at 3:00 AM UTC)
+  # Runs the workflow on a schedule (e.g., every day at 12:00 PM UTC)
   schedule:
-    - cron: '0 3 * * *'
+    - cron: '0 12 * * *'
 
 jobs:
   rebase-workflow:
