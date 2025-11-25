@@ -4,6 +4,7 @@ import sys
 import time
 import datetime
 import os
+import base64
 from datetime import timedelta
 from html import escape
 from urllib.parse import unquote, quote
