@@ -396,7 +396,7 @@ def _evil_logic(req: V1RequestBase, driver: WebDriver, method: str) -> Challenge
             logging.info("Waiting " + str(req.waitInSeconds) + " seconds before returning the response...")
             # time.sleep(req.waitInSeconds)
             elapsed = 0
-            interval = 5
+            interval = 1
             while elapsed < req.waitInSeconds:
                 time.sleep(min(interval, req.waitInSeconds - elapsed))
                 elapsed += interval
