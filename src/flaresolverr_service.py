@@ -399,7 +399,7 @@ def _evil_logic(req: V1RequestBase, driver: WebDriver, method: str) -> Challenge
             screenshot_dir = "/app/output/screenshots"
             os.makedirs(screenshot_dir, exist_ok=True)
             elapsed = 0
-            interval = 1
+            interval = 3
             while elapsed < req.waitInSeconds:
                 time.sleep(min(interval, req.waitInSeconds - elapsed))
                 elapsed += interval
