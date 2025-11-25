@@ -3,6 +3,7 @@ import platform
 import sys
 import time
 import datetime
+import os
 from datetime import timedelta
 from html import escape
 from urllib.parse import unquote, quote
@@ -395,6 +396,8 @@ def _evil_logic(req: V1RequestBase, driver: WebDriver, method: str) -> Challenge
         if req.waitInSeconds and req.waitInSeconds > 0:
             logging.info("Waiting " + str(req.waitInSeconds) + " seconds before returning the response...")
             # time.sleep(req.waitInSeconds)
+            screenshot_dir = "/app/output/screenshots"
+            os.makedirs(screenshot_dir, exist_ok=True)
             elapsed = 0
             interval = 1
             while elapsed < req.waitInSeconds:
@@ -402,6 +405,11 @@ def _evil_logic(req: V1RequestBase, driver: WebDriver, method: str) -> Challenge
                 elapsed += interval
                 current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 try:
+                    timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+                    screenshot_file = os.path.join(screenshot_dir, f'screenshot_{timestamp}.png')
+                    screenshot_base64 = driver.get_screenshot_as_base64()
+                    with open(screenshot_file, 'wb') as f:
+                        f.write(base64.b64decode(screenshot_base64))
                     console_logs = driver.get_log('browser')
                     for log in console_logs:
                         logging.info(f"[{current_time}] [Extension] {log.get('message', '')}")
