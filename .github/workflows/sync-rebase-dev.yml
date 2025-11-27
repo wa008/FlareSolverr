@@ -1,0 +1,84 @@
+name: Sync Fork with Rebase
+
+on:
+  # 1. Manual Trigger
+  # Allows you to manually run this workflow from the "Actions" tab
+  workflow_dispatch:
+  
+  # 2. Scheduled Trigger
+  # Runs the workflow on a schedule (e.g., every day at 3:00 AM UTC)
+  schedule:
+    - cron: '0 3 * * *'
+
+jobs:
+  rebase-workflow:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 1. Check out your forked repository
+      # fetch-depth: 0 is crucial. It fetches the entire Git history,
+      # which is required for a successful rebase.
+      - name: Checkout target repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # The GITHUB_TOKEN is required to push changes back to your repo
+          token: ${{ secrets.GITHUB_TOKEN }} 
+
+      # 2. Configure Git User
+      # Sets the author for any commits made by this action (like the merge commit)
+      - name: Set Git user
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+      # 3. Add the Upstream Remote
+      # 'Upstream' is the original repository you forked from
+      - name: Add upstream remote
+        run: |
+          # This is the original repository URL you provided
+          git remote add upstream https://github.com/FlareSolverr/FlareSolverr.git
+          
+      # 4. Fetch all updates from the upstream remote
+      - name: Fetch upstream
+        run: git fetch upstream
+
+      # --- KEY SYNC STEPS ---
+
+      # 5. Sync your main branch
+      # This ensures your fork's 'main' branch is an exact mirror of the upstream 'main'.
+      - name: Sync main branch
+        run: |
+          git checkout main
+          # Force-reset your local 'main' to match the upstream 'main'
+          git reset --hard upstream/main
+          # Force-push this change to your fork's 'main' branch
+          git push origin main --force
+
+      # 6. Rebase your custom branch
+      # This is the core logic: apply your changes on top of the newly updated 'main'.
+      - name: Rebase custom branch
+        run: |
+          # Checkout your 'dev' branch
+          git checkout dev
+          
+          # This command will fail (exit non-zero) if conflicts are found
+          git rebase main
+            
+      # 7. Push rebased branch (only runs if Step 6 succeeded)
+      - name: Push rebased branch
+        run: |
+          # Push the changes to your 'dev' branch
+          # Use --force-with-lease for a safer force push
+          git push origin dev --force-with-lease
+          
+      # 8. Notify on Conflict (only runs if Step 6 failed)
+      # The 'if: failure()' condition catches the failed 'git rebase' step.
+      - name: Notify on conflict
+        if: failure()
+        run: |
+          echo "!!! REBASE CONFLICT !!!"
+          echo "Automatic rebase failed. Please resolve conflicts manually."
+          echo "Visit the 'Actions' tab in your repo for details."
+          # This exit 1 ensures the entire workflow is marked as "failed"
+          exit 1
