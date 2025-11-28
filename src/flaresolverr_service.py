@@ -413,7 +413,9 @@ def _evil_logic(req: V1RequestBase, driver: WebDriver, method: str) -> Challenge
                     #     f.write(base64.b64decode(screenshot_base64))
                     console_logs = driver.get_log('browser')
                     for log in console_logs:
-                        logging.info(f"[{current_time}] [Extension] {log.get('message', '')}")
+                        log_message = log.get('log_message', '')
+                        if "This request was automatically upgraded to HTTPS" in log_message: continue
+                        logging.info(f"[{current_time}] [Extension] {log_message}")
                 except Exception:
                     pass
 
