@@ -28,6 +28,16 @@ def get_config_headless() -> bool:
     return os.environ.get('HEADLESS', 'true').lower() == 'true'
 
 
+def get_config_blocked_domains() -> list:
+    """Get list of domains to block from BLOCKED_DOMAINS environment variable.
+    Format: comma-separated domain names, e.g., 'ads.example.com,tracker.example.com'
+    """
+    blocked = os.environ.get('BLOCKED_DOMAINS', '')
+    if blocked:
+        return [domain.strip() for domain in blocked.split(',') if domain.strip()]
+    return []
+
+
 def get_flaresolverr_version() -> str:
     global FLARESOLVERR_VERSION
     if FLARESOLVERR_VERSION is not None:
@@ -145,6 +155,13 @@ def get_webdriver(proxy: dict = None) -> WebDriver:
         options.add_argument('--disable-gpu-sandbox')
     options.add_argument('--ignore-certificate-errors')
     options.add_argument('--ignore-ssl-errors')
+
+    # Block specific domains by mapping them to a non-routable address
+    blocked_domains = get_config_blocked_domains()
+    if blocked_domains:
+        host_rules = ','.join([f'MAP {domain} 127.0.0.1' for domain in blocked_domains])
+        options.add_argument(f'--host-rules={host_rules}')
+        logging.debug('Blocking domains: %s', blocked_domains)
 
     language = os.environ.get('LANG', None)
     if language is not None:
