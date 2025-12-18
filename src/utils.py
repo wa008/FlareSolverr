@@ -159,8 +159,8 @@ def get_webdriver(proxy: dict = None) -> WebDriver:
     # Block specific domains by mapping them to a non-routable address
     blocked_domains = get_config_blocked_domains()
     if blocked_domains:
-        host_rules = ','.join([f'MAP {domain} 127.0.0.1' for domain in blocked_domains])
-        options.add_argument(f'--host-rules={host_rules}')
+        host_rules = ','.join([f'MAP {domain} 0.0.0.0' for domain in blocked_domains])
+        options.add_argument(f'--host-resolver-rules={host_rules}')
         logging.debug('Blocking domains: %s', blocked_domains)
 
     language = os.environ.get('LANG', None)
