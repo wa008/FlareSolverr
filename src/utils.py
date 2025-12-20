@@ -163,6 +163,15 @@ def get_webdriver(proxy: dict = None) -> WebDriver:
         options.add_argument(f'--host-resolver-rules={host_rules}')
         logging.debug('Blocking domains: %s', blocked_domains)
 
+    # for block domain
+    options.add_argument("--disable-quic")
+    options.add_argument("--disable-async-dns")
+    options.add_argument("--disable-features=NetworkServiceInProcess")
+    options.add_argument("--disable-features=IsolateOrigins,site-per-process")
+    
+    # disable DNS over HTTPS
+    options.add_argument("--disable-features=DnsOverHttps")
+
     language = os.environ.get('LANG', None)
     if language is not None:
         options.add_argument('--accept-lang=%s' % language)
@@ -246,6 +255,16 @@ def get_webdriver(proxy: dict = None) -> WebDriver:
     # options.add_argument('--disable-setuid-sandbox')
     # options.add_argument('--disable-dev-shm-usage')
     # driver = webdriver.Chrome(options=options)
+
+    driver.execute_cdp_cmd('Network.setBlockedURLs', {
+        'urls': [
+            '*.tile.openstreetmap.org',
+            'a.tile.openstreetmap.org',
+            'b.tile.openstreetmap.org',
+            'c.tile.openstreetmap.org',
+        ]
+    })
+    driver.execute_cdp_cmd('Network.enable', {})
 
     return driver
 
