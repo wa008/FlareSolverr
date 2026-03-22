@@ -196,7 +196,15 @@ def get_webdriver(proxy: dict = None) -> WebDriver:
     if proxy and all(key in proxy for key in ['url', 'username', 'password']):
         proxy_extension_dir = create_proxy_extension(proxy)
         options.add_argument("--disable-features=DisableLoadExtensionCommandLineSwitch")
-        options.add_argument("--load-extension=%s" % os.path.abspath(proxy_extension_dir) + ",/app/extension")
+        extension_paths = []
+        if proxy_extension_dir is not None:
+            extension_paths.append(os.path.abspath(proxy_extension_dir))
+        for ext_dir in ("/app/extension", "/app/NopeCHA-ext"):
+            if os.path.isdir(ext_dir):
+                extension_paths.append(ext_dir)
+        if extension_paths:
+            logging.info("Loading Chrome extensions: %s", extension_paths)
+            options.add_argument("--load-extension=%s" % ",".join(extension_paths))
     elif proxy and 'url' in proxy:
         proxy_url = proxy['url']
         logging.debug("Using webdriver proxy: %s", proxy_url)
