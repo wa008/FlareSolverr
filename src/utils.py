@@ -32,6 +32,16 @@ def get_config_disable_media() -> bool:
     return os.environ.get('DISABLE_MEDIA', 'false').lower() == 'true'
 
 
+def get_config_blocked_domains() -> list:
+    """Get list of domains to block from BLOCKED_DOMAINS environment variable.
+    Format: comma-separated domain names, e.g., 'ads.example.com,tracker.example.com'
+    """
+    blocked = os.environ.get('BLOCKED_DOMAINS', '')
+    if blocked:
+        return [domain.strip() for domain in blocked.split(',') if domain.strip()]
+    return []
+
+
 def get_flaresolverr_version() -> str:
     global FLARESOLVERR_VERSION
     if FLARESOLVERR_VERSION is not None:
@@ -150,6 +160,22 @@ def get_webdriver(proxy: dict = None) -> WebDriver:
     options.add_argument('--ignore-certificate-errors')
     options.add_argument('--ignore-ssl-errors')
 
+    # Block specific domains by mapping them to a non-routable address
+    blocked_domains = get_config_blocked_domains()
+    if blocked_domains:
+        host_rules = ','.join([f'MAP {domain} 0.0.0.0' for domain in blocked_domains])
+        options.add_argument(f'--host-resolver-rules={host_rules}')
+        logging.debug('Blocking domains: %s', blocked_domains)
+
+    # for block domain
+    options.add_argument("--disable-quic")
+    options.add_argument("--disable-async-dns")
+    options.add_argument("--disable-features=NetworkServiceInProcess")
+    options.add_argument("--disable-features=IsolateOrigins,site-per-process")
+    
+    # disable DNS over HTTPS
+    options.add_argument("--disable-features=DnsOverHttps")
+
     language = os.environ.get('LANG', None)
     if language is not None:
         options.add_argument('--accept-lang=%s' % language)
@@ -158,11 +184,31 @@ def get_webdriver(proxy: dict = None) -> WebDriver:
     if USER_AGENT is not None:
         options.add_argument('--user-agent=%s' % USER_AGENT)
 
+    options.set_capability('goog:loggingPrefs', {'browser': 'ALL'})
+    prefs = {
+        'download.default_directory': '/app/output/downloads',
+        'download.prompt_for_download': False,  # Don't ask where to save
+        'download.directory_upgrade': True,
+        'safebrowsing.enabled': False,  # Disable safe browsing warnings
+        'profile.default_content_setting_values.automatic_downloads': 1,  # Allow multiple downloads
+        'profile.content_settings.exceptions.automatic_downloads': {
+            '*': {'setting': 1}  # Allow all sites to download multiple files
+        }
+    }
+    options.add_experimental_option('prefs', prefs)
     proxy_extension_dir = None
     if proxy and all(key in proxy for key in ['url', 'username', 'password']):
         proxy_extension_dir = create_proxy_extension(proxy)
         options.add_argument("--disable-features=DisableLoadExtensionCommandLineSwitch")
-        options.add_argument("--load-extension=%s" % os.path.abspath(proxy_extension_dir))
+        extension_paths = []
+        if proxy_extension_dir is not None:
+            extension_paths.append(os.path.abspath(proxy_extension_dir))
+        for ext_dir in ("/app/extension", "/app/NopeCHA-ext"):
+            if os.path.isdir(ext_dir):
+                extension_paths.append(ext_dir)
+        if extension_paths:
+            logging.info("Loading Chrome extensions: %s", extension_paths)
+            options.add_argument("--load-extension=%s" % ",".join(extension_paths))
     elif proxy and 'url' in proxy:
         proxy_url = proxy['url']
         logging.debug("Using webdriver proxy: %s", proxy_url)
@@ -221,6 +267,16 @@ def get_webdriver(proxy: dict = None) -> WebDriver:
     # options.add_argument('--disable-setuid-sandbox')
     # options.add_argument('--disable-dev-shm-usage')
     # driver = webdriver.Chrome(options=options)
+
+    driver.execute_cdp_cmd('Network.setBlockedURLs', {
+        'urls': [
+            '*.tile.openstreetmap.org',
+            'a.tile.openstreetmap.org',
+            'b.tile.openstreetmap.org',
+            'c.tile.openstreetmap.org',
+        ]
+    })
+    driver.execute_cdp_cmd('Network.enable', {})
 
     return driver
 
