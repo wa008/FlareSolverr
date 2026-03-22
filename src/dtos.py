@@ -11,6 +11,7 @@ class ChallengeResolutionResultT:
     cookies: list = None
     userAgent: str = None
     screenshot: str | None = None
+    turnstile_token: str = None
 
     def __init__(self, _dict):
         self.__dict__.update(_dict)
@@ -46,6 +47,10 @@ class V1RequestBase(object):
     download: bool = None   # deprecated v2.0.0, not used
     returnRawHtml: bool = None  # deprecated v2.0.0, not used
     waitInSeconds: int = None
+    # Optional resource blocking flag (blocks images, CSS, and fonts)
+    disableMedia: bool = None
+    # Optional when you've got a turnstile captcha that needs to be clicked after X number of Tab presses
+    tabs_till_verify : int = None
 
     def __init__(self, _dict):
         self.__dict__.update(_dict)

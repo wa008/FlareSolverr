@@ -28,6 +28,10 @@ def get_config_headless() -> bool:
     return os.environ.get('HEADLESS', 'true').lower() == 'true'
 
 
+def get_config_disable_media() -> bool:
+    return os.environ.get('DISABLE_MEDIA', 'false').lower() == 'true'
+
+
 def get_config_blocked_domains() -> list:
     """Get list of domains to block from BLOCKED_DOMAINS environment variable.
     Format: comma-separated domain names, e.g., 'ads.example.com,tracker.example.com'
