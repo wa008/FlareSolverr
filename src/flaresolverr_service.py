@@ -100,7 +100,13 @@ def health_endpoint() -> HealthResponse:
 
 def controller_v1_endpoint(req: V1RequestBase) -> V1ResponseBase:
     start_ts = int(time.time() * 1000)
-    logging.info(f"Incoming request => POST /v1 body: {utils.object_to_dict(req)}")
+    request_log = utils.object_to_dict(req)
+    if isinstance(request_log.get('proxy'), dict):
+        request_log['proxy'] = dict(request_log['proxy'])
+        for key in ('username', 'password'):
+            if key in request_log['proxy']:
+                request_log['proxy'][key] = '[REDACTED]'
+    logging.info(f"Incoming request => POST /v1 body: {request_log}")
     res: V1ResponseBase
     try:
         res = _controller_v1_handler(req)
