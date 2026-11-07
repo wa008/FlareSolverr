@@ -215,6 +215,15 @@ def get_webdriver(proxy: dict = None) -> WebDriver:
         proxy_url = proxy['url']
         logging.debug("Using webdriver proxy: %s", proxy_url)
         options.add_argument('--proxy-server=%s' % proxy_url)
+    else:
+        extension_paths = []
+        for ext_dir in ("/app/extension", "/app/NopeCHA-ext"):
+            if os.path.isdir(ext_dir):
+                extension_paths.append(ext_dir)
+        if extension_paths:
+            logging.info("Loading Chrome extensions: %s", extension_paths)
+            options.add_argument("--load-extension=%s" % ",".join(extension_paths))
+
 
     # note: headless mode is detected (headless = True)
     # we launch the browser in head-full mode with the window hidden
