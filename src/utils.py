@@ -6,10 +6,13 @@ import re
 import shutil
 import sys
 import tempfile
+import time
 import urllib.parse
+import urllib.request
 
 from selenium.webdriver.chrome.webdriver import WebDriver
 import undetected_chromedriver as uc
+from websockets.sync.client import connect
 
 FLARESOLVERR_VERSION = None
 PLATFORM_VERSION = None
@@ -18,6 +21,85 @@ CHROME_MAJOR_VERSION = None
 USER_AGENT = None
 XVFB_DISPLAY = None
 PATCHED_DRIVER_PATH = None
+
+
+class ManagedChrome(uc.Chrome):
+    """Keep an unpacked proxy extension available for the browser's lifetime."""
+
+    def __init__(self, *args, proxy_extension_dir=None, **kwargs):
+        self.debug = False  # uc.__getattribute__ also runs during partial initialization.
+        self._proxy_extension_dir = proxy_extension_dir
+        try:
+            super().__init__(*args, **kwargs)
+        except Exception:
+            try:
+                self.quit()
+            except Exception:
+                logging.exception("Failed to clean up partially initialized browser")
+            raise
+
+    def quit(self):
+        try:
+            super().quit()
+        finally:
+            if self._proxy_extension_dir is not None:
+                shutil.rmtree(self._proxy_extension_dir, ignore_errors=True)
+                self._proxy_extension_dir = None
+
+
+def wait_for_proxy_extension(driver, proxy, timeout=15):
+    """Do not navigate until the proxy settings and auth handler are active."""
+    address = driver.capabilities['goog:chromeOptions']['debuggerAddress']
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    deadline = time.monotonic() + timeout
+    worker = None
+    while time.monotonic() < deadline:
+        with opener.open('http://' + address + '/json/list', timeout=min(2, max(0.1, deadline - time.monotonic()))) as response:
+            targets = json.load(response)
+        worker = next((target for target in targets
+                       if target['type'] == 'service_worker'
+                       and target['url'].endswith('/flaresolverr_proxy_auth.js')), None)
+        if worker:
+            break
+        time.sleep(0.1)
+    if worker is None:
+        raise TimeoutError('Proxy extension service worker did not start')
+
+    expression = '''new Promise(resolve => chrome.proxy.settings.get({}, settings => resolve({
+        level: settings.levelOfControl, value: settings.value,
+        authListener: chrome.webRequest.onAuthRequired.hasListeners()
+    })))'''
+    with connect(worker['webSocketDebuggerUrl'], proxy=None,
+                 open_timeout=max(0.1, deadline - time.monotonic()), close_timeout=1) as websocket:
+        # A worker may be waiting for a debugger during browser startup. Resume
+        # this extension only, then verify its actual settings, not a fixed sleep.
+        for command_id, (method, params) in enumerate((
+            ('Runtime.enable', {}),
+            ('Runtime.runIfWaitingForDebugger', {}),
+            ('Runtime.evaluate', {'expression': expression, 'awaitPromise': True, 'returnByValue': True}),
+        ), 1):
+            websocket.send(json.dumps({'id': command_id, 'method': method, 'params': params}))
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError('Proxy extension readiness check timed out')
+                reply = json.loads(websocket.recv(timeout=remaining))
+                if reply.get('id') == command_id:
+                    break
+            if 'error' in reply or 'exceptionDetails' in reply.get('result', {}):
+                raise RuntimeError('Proxy extension readiness check failed')
+
+    state = reply.get('result', {}).get('result', {}).get('value', {})
+    expected = urllib.parse.urlparse(proxy['url'])
+    actual = state.get('value', {}).get('rules', {}).get('singleProxy', {})
+    if (state.get('level') != 'controlled_by_this_extension'
+            or not state.get('authListener')
+            or state.get('value', {}).get('mode') != 'fixed_servers'
+            or actual.get('host') != expected.hostname
+            or actual.get('port') != expected.port
+            or actual.get('scheme') != expected.scheme):
+        raise RuntimeError('Proxy extension is not ready; refusing to navigate without the requested proxy')
+    logging.debug('Proxy extension settings and authentication handler ready')
 
 
 def get_config_log_html() -> bool:
@@ -85,7 +167,7 @@ def create_proxy_extension(proxy: dict) -> str:
           "<all_urls>"
         ],
         "background": {
-          "service_worker": "background.js"
+          "service_worker": "flaresolverr_proxy_auth.js"
         },
         "minimum_chrome_version": "76.0.0"
     }
@@ -133,7 +215,7 @@ def create_proxy_extension(proxy: dict) -> str:
     with open(os.path.join(proxy_extension_dir, "manifest.json"), "w") as f:
         f.write(manifest_json)
 
-    with open(os.path.join(proxy_extension_dir, "background.js"), "w") as f:
+    with open(os.path.join(proxy_extension_dir, "flaresolverr_proxy_auth.js"), "w") as f:
         f.write(background_js)
 
     return proxy_extension_dir
@@ -160,7 +242,7 @@ def get_webdriver(proxy: dict = None) -> WebDriver:
     options.add_argument('--ignore-certificate-errors')
     options.add_argument('--ignore-ssl-errors')
     # disable breaking popup
-    options.add_argument("--disable-features=LocalNetworkAccessChecks")
+    disabled_features = ["LocalNetworkAccessChecks"]
 
     # Block specific domains by mapping them to a non-routable address
     blocked_domains = get_config_blocked_domains()
@@ -172,11 +254,10 @@ def get_webdriver(proxy: dict = None) -> WebDriver:
     # for block domain
     options.add_argument("--disable-quic")
     options.add_argument("--disable-async-dns")
-    options.add_argument("--disable-features=NetworkServiceInProcess")
-    options.add_argument("--disable-features=IsolateOrigins,site-per-process")
+    disabled_features.extend(["NetworkServiceInProcess", "IsolateOrigins", "site-per-process"])
     
     # disable DNS over HTTPS
-    options.add_argument("--disable-features=DnsOverHttps")
+    disabled_features.append("DnsOverHttps")
 
     language = os.environ.get('LANG', None)
     if language is not None:
@@ -201,7 +282,7 @@ def get_webdriver(proxy: dict = None) -> WebDriver:
     proxy_extension_dir = None
     if proxy and all(key in proxy for key in ['url', 'username', 'password']):
         proxy_extension_dir = create_proxy_extension(proxy)
-        options.add_argument("--disable-features=DisableLoadExtensionCommandLineSwitch")
+        disabled_features.append("DisableLoadExtensionCommandLineSwitch")
         extension_paths = []
         if proxy_extension_dir is not None:
             extension_paths.append(os.path.abspath(proxy_extension_dir))
@@ -224,6 +305,11 @@ def get_webdriver(proxy: dict = None) -> WebDriver:
             logging.info("Loading Chrome extensions: %s", extension_paths)
             options.add_argument("--load-extension=%s" % ",".join(extension_paths))
 
+    # Repeated switches overwrite earlier feature lists in Chromium.
+    options.add_argument("--disable-features=%s" % ",".join(disabled_features))
+    # Do not let the default search/new-tab page start network requests while
+    # the proxy extension and ChromeDriver are still initializing.
+    options.add_argument("about:blank")
 
     # note: headless mode is detected (headless = True)
     # we launch the browser in head-full mode with the window hidden
@@ -252,44 +338,50 @@ def get_webdriver(proxy: dict = None) -> WebDriver:
 
     # downloads and patches the chromedriver
     # if we don't set driver_executable_path it downloads, patches, and deletes the driver each time
+    driver = None
+    stage = "creating browser"
     try:
-        driver = uc.Chrome(options=options, browser_executable_path=browser_executable_path,
+        logging.debug("Browser initialization: %s", stage)
+        driver = ManagedChrome(options=options, browser_executable_path=browser_executable_path,
                            driver_executable_path=driver_exe_path, version_main=version_main,
-                           windows_headless=windows_headless, headless=get_config_headless())
-    except Exception as e:
-        logging.error("Error starting Chrome: %s" % e)
-        # No point in continuing if we cannot retrieve the driver
-        raise e
+                           windows_headless=windows_headless, headless=get_config_headless(),
+                           proxy_extension_dir=proxy_extension_dir)
 
-    # save the patched driver to avoid re-downloads
-    if driver_exe_path is None:
-        PATCHED_DRIVER_PATH = os.path.join(driver.patcher.data_path, driver.patcher.exe_name)
-        if PATCHED_DRIVER_PATH != driver.patcher.executable_path:
-            shutil.copy(driver.patcher.executable_path, PATCHED_DRIVER_PATH)
+        # save the patched driver to avoid re-downloads
+        if driver_exe_path is None:
+            PATCHED_DRIVER_PATH = os.path.join(driver.patcher.data_path, driver.patcher.exe_name)
+            if PATCHED_DRIVER_PATH != driver.patcher.executable_path:
+                shutil.copy(driver.patcher.executable_path, PATCHED_DRIVER_PATH)
 
-    # clean up proxy extension directory
-    if proxy_extension_dir is not None:
-        shutil.rmtree(proxy_extension_dir)
-
-    # selenium vanilla
-    # options = webdriver.ChromeOptions()
-    # options.add_argument('--no-sandbox')
-    # options.add_argument('--window-size=1920,1080')
-    # options.add_argument('--disable-setuid-sandbox')
-    # options.add_argument('--disable-dev-shm-usage')
-    # driver = webdriver.Chrome(options=options)
-
-    driver.execute_cdp_cmd('Network.setBlockedURLs', {
-        'urls': [
-            '*.tile.openstreetmap.org',
-            'a.tile.openstreetmap.org',
-            'b.tile.openstreetmap.org',
-            'c.tile.openstreetmap.org',
-        ]
-    })
-    driver.execute_cdp_cmd('Network.enable', {})
-
-    return driver
+        stage = "Network.setBlockedURLs"
+        logging.debug("Browser initialization: %s", stage)
+        driver.execute_cdp_cmd(stage, {
+            'urls': [
+                '*.tile.openstreetmap.org',
+                'a.tile.openstreetmap.org',
+                'b.tile.openstreetmap.org',
+                'c.tile.openstreetmap.org',
+            ]
+        })
+        stage = "Network.enable"
+        logging.debug("Browser initialization: %s", stage)
+        driver.execute_cdp_cmd(stage, {})
+        if proxy_extension_dir is not None:
+            stage = "proxy extension readiness"
+            logging.debug("Browser initialization: %s", stage)
+            wait_for_proxy_extension(driver, proxy)
+        logging.debug("Browser initialization complete")
+        return driver
+    except Exception:
+        logging.exception("Browser initialization failed during %s", stage)
+        if driver is not None:
+            try:
+                driver.quit()
+            except Exception:
+                logging.exception("Failed to clean up browser after initialization error")
+        elif proxy_extension_dir is not None:
+            shutil.rmtree(proxy_extension_dir, ignore_errors=True)
+        raise
 
 
 def get_chrome_exe_path() -> str:
